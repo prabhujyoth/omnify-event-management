@@ -1,226 +1,267 @@
 "use client";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { IconTrash } from "@tabler/icons-react";
-import { IconPlus } from "@tabler/icons-react";
-import { IconMapPin } from "@tabler/icons-react";
-import { IconCalendarWeek } from "@tabler/icons-react";
-import { IconUser } from "@tabler/icons-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useState } from "react";
-
-const events = [
-  {
-    name: "Test Event",
-    location: "Kamanahalli",
-    start_time: "2025-09-22T20:15:57.830000+05:30",
-    end_time: "2025-09-22T20:15:57.830000+05:30",
-    max_capacity: 100,
-    id: 1,
-  },
-
-  {
-    name: "Test Event 2",
-    location: "Kamanahalli",
-    start_time: "2025-09-22T20:15:57.830000+05:30",
-    end_time: "2025-09-22T20:15:57.830000+05:30",
-    max_capacity: 10,
-    id: 2,
-  },
-];
+import { useState, useEffect } from "react";
+import { LeftPanel } from "@/components/page-components/LeftPanel";
+import { RightPanel } from "@/components/page-components/RightPanel";
+import { CreateEventDialog } from "@/components/page-components/CreateEventDialog";
+import { AddAttendeesDialog } from "@/components/page-components/AddAttendeesDialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle, AlertCircle } from "lucide-react";
+import { eventService, Event, Attendee } from "@/services/eventService";
 
 export default function Home() {
-  const [data, setData] = useState([
-    { id: 1, name: "Alice", email: "alice@example.com", role: "Admin" },
-    { id: 2, name: "Bob", email: "bob@example.com", role: "Member" },
-    { id: 3, name: "Charlie", email: "charlie@example.com", role: "Member" },
-  ]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<Event | undefined>(
+    undefined
+  );
+  const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [isAddAttendeeOpen, setIsAddAttendeeOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const onDelete = (id) => {
-    setData((prev) => prev.filter((row) => row.id !== id));
+  // Clear success message after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const events = await eventService.getAllEvents();
+        setEvents(events);
+        // Set the first event as selected if we have events and no event is selected
+        if (events.length > 0 && !selectedEvent) {
+          setSelectedEvent(events[0]);
+          await fetchAttendees(events[0].id);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err?.response?.data?.detail
+            : "An error occurred while fetching events"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  const fetchAttendees = async (eventId: number) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const attendees = await eventService.getEventAttendees(eventId);
+      setAttendees(attendees);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err?.response?.data?.detail
+          : "An error occurred while fetching attendees"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleEventSelect = (event: Event) => {
+    setSelectedEvent(event);
+    fetchAttendees(event.id);
+  };
+
+  const handleEventDelete = async (id: number) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await eventService.deleteEvent(id);
+
+      setEvents((prev) => prev.filter((event) => event.id !== id));
+      if (selectedEvent?.id === id) {
+        const firstEvent = events.find((e) => e.id !== id);
+        setSelectedEvent(firstEvent);
+        if (firstEvent) {
+          fetchAttendees(firstEvent.id);
+        } else {
+          setAttendees([]);
+        }
+      }
+      setSuccessMessage("Event deleted successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err?.response?.data?.detail
+          : "An error occurred while deleting the event"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAttendeeDelete = async (id: number) => {
+    if (!selectedEvent) {
+      setError("No event selected");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      await eventService.deleteAttendee(selectedEvent.id, id);
+
+      setAttendees((prev) => prev.filter((attendee) => attendee.id !== id));
+      setSuccessMessage("Attendee removed successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err?.response?.data?.detail
+          : "An error occurred while removing the attendee"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateEvent = async (eventData: {
+    name: string;
+    location: string;
+    startTime: string;
+    endTime: string;
+    maxCapacity: number;
+  }) => {
+    // Validate times
+    const startTime = new Date(eventData.startTime);
+    const endTime = new Date(eventData.endTime);
+
+    if (endTime <= startTime) {
+      setError("End time must be after start time");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const newEvent = await eventService.createEvent(eventData);
+      setEvents((prev) => [...prev, newEvent]);
+      setSelectedEvent(newEvent);
+      setIsCreateEventOpen(false);
+      setSuccessMessage("Event created successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err?.response?.data?.detail
+          : "An error occurred while creating the event"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddAttendee = async (attendeeData: {
+    name: string;
+    email: string;
+    role: string;
+  }) => {
+    if (!selectedEvent) {
+      setError("Please select an event first");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const newAttendee = await eventService.addAttendee(
+        selectedEvent.id,
+        attendeeData
+      );
+      setAttendees((prev) => [...prev, newAttendee]);
+      setIsAddAttendeeOpen(false);
+      setSuccessMessage("Attendee added successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err?.response?.data?.detail
+          : "An error occurred while registering the attendee"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="p-4 flex gap-2 h-full">
-      {/* Left Panel - Events */}
-      <div className="w-1/4">
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>Events</CardTitle>
-            <div className="flex items-end gap-2">
-              <Input
-                type="text"
-                className="mt-3"
-                placeholder="Filter by Event Name"
-              />
-
-              <Button>
-                <IconPlus />
-                Create Event
-              </Button>
+    <>
+      <div className="p-4 flex gap-2 h-full">
+        <div className="w-1/4">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {events.map((event) => {
-              return (
-                <Card key={event.id}>
-                  <CardHeader>
-                    <div className="flex justify-between">
-                      <CardTitle>{event.name}</CardTitle>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="size-8"
-                      >
-                        <IconTrash />
-                      </Button>
-                    </div>
-                    <CardDescription>
-                      Location: {event.location}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              );
-            })}
-          </CardContent>
-        </Card>
+          ) : (
+            <LeftPanel
+              events={events}
+              selectedEventId={selectedEvent?.id}
+              onEventDelete={handleEventDelete}
+              onCreateEvent={() => setIsCreateEventOpen(true)}
+              onEventSelect={handleEventSelect}
+            />
+          )}
+        </div>
+        <div className="w-3/4 h-full">
+          <RightPanel
+            selectedEvent={selectedEvent}
+            attendees={attendees}
+            onAttendeeDelete={handleAttendeeDelete}
+            onAddAttendee={() => setIsAddAttendeeOpen(true)}
+          />
+        </div>
+
+        <CreateEventDialog
+          isOpen={isCreateEventOpen}
+          onClose={() => setIsCreateEventOpen(false)}
+          onSubmit={handleCreateEvent}
+        />
+
+        <AddAttendeesDialog
+          isOpen={isAddAttendeeOpen}
+          onClose={() => setIsAddAttendeeOpen(false)}
+          onSubmit={handleAddAttendee}
+        />
       </div>
-      {/* Right Panel - Event Details & Attendees List */}
 
-      <div className="w-3/4 h-full">
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>Event Details</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-1 h-full flex-col gap-2">
-            <div className="flex gap-2">
-              <Card className="h-full bg-[#6d6dcc] flex-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconMapPin />
-                    Location
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  Details
-                </CardContent>
-              </Card>
-              <Card className="h-full bg-[#4d9f4d] flex-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconCalendarWeek />
-                    Start Date
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  Details
-                </CardContent>
-              </Card>
-              <Card className="h-full bg-[#be6d6d] flex-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconCalendarWeek />
-                    End Date
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  Details
-                </CardContent>
-              </Card>
-              <Card className="h-full bg-[#9c9c48] flex-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconUser />
-                    Max Capactiy
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  Details
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="w-full h-full">
-              <CardHeader>
-                <CardTitle>Attendees Details</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-2">
-                <div className="flex items-end justify-between w-full gap-2">
-                  <Input
-                    type="text"
-                    className="mt-3 w-1/4"
-                    placeholder="Filter by Attendee Name"
-                  />
-
-                  <Button>
-                    <IconPlus />
-                    Add Attendee
-                  </Button>
-                </div>
-                <div className="overflow-auto h-20" style={{ flexGrow: 1 }}>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]">ID</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell className="font-medium">
-                            {row.id}
-                          </TableCell>
-                          <TableCell>{row.name}</TableCell>
-                          <TableCell>{row.email}</TableCell>
-                          <TableCell>{row.role}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => onDelete?.(row.id)}
-                            >
-                              <IconTrash size={16} />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-
-                      {data.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="text-center text-muted-foreground"
-                          >
-                            No data available
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
+      {/* Alert Container */}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50">
+        {successMessage && (
+          <Alert className="w-[400px] shadow-lg">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+        {error && (
+          <Alert variant="destructive" className="w-[400px] shadow-lg">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
       </div>
-    </div>
+    </>
   );
 }
