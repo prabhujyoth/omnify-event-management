@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface CreateEventDialogProps {
   isOpen: boolean;
@@ -37,10 +37,33 @@ export function CreateEventDialog({
   onSubmit,
 }: CreateEventDialogProps) {
   const [formData, setFormData] = useState(initialState);
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Reset form when dialog is opened
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(initialState);
+    }
+  }, [isOpen]);
+
+  // Convert local time to UTC for API submission
+  const convertToUTC = (localDateTime: string) => {
+    if (!localDateTime) return "";
+    const localDate = new Date(localDateTime);
+    return localDate.toISOString();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+
+    // Convert times to UTC before submitting
+    const submissionData = {
+      ...formData,
+      startTime: convertToUTC(formData.startTime),
+      endTime: convertToUTC(formData.endTime),
+    };
+
+    onSubmit(submissionData);
     setFormData(initialState);
     onClose();
   };
@@ -56,7 +79,8 @@ export function CreateEventDialog({
           <DialogHeader>
             <DialogTitle>Create New Event</DialogTitle>
             <DialogDescription>
-              Fill in the details to create a new event
+              Fill in the details to create a new event. Times are in{" "}
+              {userTimeZone}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -76,24 +100,35 @@ export function CreateEventDialog({
               }
               required
             />
-            <Input
-              type="datetime-local"
-              placeholder="Start Time"
-              value={formData.startTime}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, startTime: e.target.value }))
-              }
-              required
-            />
-            <Input
-              type="datetime-local"
-              placeholder="End Time"
-              value={formData.endTime}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, endTime: e.target.value }))
-              }
-              required
-            />
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">
+                Start Time ({userTimeZone})
+              </label>
+              <Input
+                type="datetime-local"
+                value={formData.startTime}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    startTime: e.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">
+                End Time ({userTimeZone})
+              </label>
+              <Input
+                type="datetime-local"
+                value={formData.endTime}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, endTime: e.target.value }))
+                }
+                required
+              />
+            </div>
             <Input
               type="number"
               placeholder="Max Capacity"

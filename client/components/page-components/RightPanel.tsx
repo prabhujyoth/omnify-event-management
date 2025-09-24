@@ -46,17 +46,20 @@ export function RightPanel({
       attendee.email.toLowerCase().includes(filterText.toLowerCase())
   );
 
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const formatDateTime = (dateTimeStr: string) => {
     const date = new Date(dateTimeStr);
-    return date
-      .toLocaleString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: userTimeZone,
+    })
+      .format(date)
       .replace(",", " at");
   };
 
