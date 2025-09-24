@@ -69,7 +69,7 @@ export function RightPanel({
         <CardTitle>Event Details</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-1 h-full flex-col gap-2">
-        <div className="flex gap-2">
+        <div className="grid grid-cols-4 not-lg:grid-cols-2 gap-2">
           <Card className="h-full bg-gradient-to-r from-[#6d6dcc] to-[#8d8dde]  flex-1">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

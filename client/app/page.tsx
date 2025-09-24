@@ -209,8 +209,8 @@ export default function Home() {
 
   return (
     <>
-      <div className="p-4 flex gap-2 h-full">
-        <div className="w-1/4">
+      <div className="p-4 grid grid-cols-4 max-lg:grid-cols-5 gap-2 h-full">
+        <div className="w-full col-span-1 max-lg:col-span-2 max-sm:col-span-5">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -225,7 +225,7 @@ export default function Home() {
             />
           )}
         </div>
-        <div className="w-3/4 h-full">
+        <div className="w-full col-span-3 max-lg:col-span-3 max-sm:col-span-5 h-full">
           <RightPanel
             selectedEvent={selectedEvent}
             attendees={attendees}
